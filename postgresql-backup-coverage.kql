@@ -1,0 +1,35 @@
+// PostgreSQL Flexible Server backup coverage by subscription via Azure Resource Graph (ARG)
+// Uses RecoveryServicesResources Data Protection backupInstances for flexibleServers (server-level protection)
+// Classification:
+//   - basic protection: automatic backup enabled (default for all PostgreSQL Flexible Servers)
+//   - advanced protection: automatic backup + vault backup instance linked
+Resources
+| where type in~ ("microsoft.dbforpostgresql/flexibleservers")
+| project subscriptionId, serverId = tolower(id), serverName = name, resourceGroup, location
+| join kind=leftouter (
+        RecoveryServicesResources 
+        | where type == "microsoft.dataprotection/backupvaults/backupinstances"
+        | where properties.dataSourceSetInfo.datasourceType =~ "Microsoft.DBforPostgreSQL/flexibleServers"
+        | extend serverKey = tolower(coalesce(tostring(properties.dataSourceInfo.resourceId), tostring(properties.dataSourceInfo.resourceID), tostring(properties.dataSourceId), tostring(properties.dataSourceSetInfo.resourceID)))
+        | project 
+                serverId = serverKey,
+                backupInstanceId = id,
+                vaultName = split(split(id, '/Microsoft.DataProtection/backupVaults/')[1],'/')[0],
+                policyName = tostring(properties.policyInfo.name),
+                protectionState = tostring(properties.currentProtectionState),
+                serverNameInstance = tostring(properties.dataSourceInfo.resourceName),
+                friendlyName = tostring(properties.friendlyName)
+) on serverId
+| extend matchedServerName = coalesce(serverName, serverNameInstance, friendlyName),
+         hasVaultBackup = iif(isnotempty(backupInstanceId), 1, 0),
+         protectionLevel = iif(isnotempty(backupInstanceId), "advanced protection", "basic protection")
+| summarize 
+        totalServers = count(),
+        AutomaticBackupDefault = count(),
+        BackupVaults = countif(hasVaultBackup == 1),
+        coveredServerNames = make_set_if(matchedServerName, hasVaultBackup == 1),
+        unprotectedServerNames = make_set_if(matchedServerName, hasVaultBackup == 0),
+        vaultNames = make_set_if(strcat(vaultName, ' (', matchedServerName, ')'), hasVaultBackup == 1)
+    by subscriptionId
+| extend vaultCoveragePct = iff(totalServers == 0, 0.0, round(100.0 * BackupVaults / totalServers, 1))
+| project-away totalServers

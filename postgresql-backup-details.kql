@@ -1,0 +1,17 @@
+// Detailed PostgreSQL Flexible Server backup status via Azure Resource Graph (ARG)
+// Per-server list with protection metadata from Azure Backup (Data Protection backup vaults)
+Resources
+| where type in~ ("microsoft.dbforpostgresql/flexibleservers")
+| project subscriptionId, serverId = tolower(id), serverName = name, resourceGroup, location
+| join kind=leftouter (
+    RecoveryServicesResources
+    | where type == "microsoft.dataprotection/backupvaults/backupinstances"
+    | extend serverKey = tolower(coalesce(tostring(properties.dataSourceInfo.resourceId), tostring(properties.dataSourceInfo.resourceID), tostring(properties.dataSourceId), tostring(properties.dataSourceSetInfo.resourceID), tostring(properties.dataSourceInfo.objectId))),
+             vaultName = tostring(split(split(id, '/Microsoft.DataProtection/backupVaults/')[1],'/')[0]),
+             protectionState = coalesce(tostring(properties.currentProtectionState), tostring(properties.protectionStatus.status))
+    | where tostring(properties.dataSourceInfo.datasourceType) has "microsoft.dbforpostgresql/flexibleservers"
+    | project serverId = serverKey, backupInstanceId = id, vaultName, protectionState
+) on serverId
+| extend isProtected = isnotempty(backupInstanceId)
+| project subscriptionId, resourceGroup, location, serverName, serverId, isProtected, vaultName, protectionState, backupInstanceId
+| order by subscriptionId asc, resourceGroup asc, serverName asc

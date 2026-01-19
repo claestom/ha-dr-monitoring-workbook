@@ -1,0 +1,35 @@
+// Recovery Services vault health and Site Recovery readiness
+// Includes both Recovery Services vaults (Site Recovery) and Data Protection backup vaults (PostgreSQL backups)
+
+// Get all vaults
+Resources
+| where type in~ ("microsoft.recoveryservices/vaults", "microsoft.dataprotection/backupvaults")
+| extend vaultType = iff(type =~ "microsoft.recoveryservices/vaults", "Recovery Services (ASR)", "Data Protection (Backup)"),
+         softDelete = iff(type =~ "microsoft.recoveryservices/vaults", 
+                          toint(properties.securitySettings.softDeleteSettings.softDeleteRetentionPeriodInDays), 
+                          toint(properties.securitySettings.softDeleteSettings.retentionDurationInDays)),
+         bcdrSecurityLevel = tostring(properties.bcdrSecurityLevel),
+         secureScore = tostring(properties.secureScore),
+         crossRegionRestore = iff(type =~ "microsoft.recoveryservices/vaults",
+                                  tostring(properties.redundancySettings.crossRegionRestore),
+                                  tostring(properties.featureSettings.crossRegionRestoreSettings.state))
+| project vault = name, subscriptionId, location, vaultType, softDelete, bcdrSecurityLevel, secureScore, crossRegionRestore
+| join kind=leftouter (
+    RecoveryServicesResources
+    | where type in~ ("microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems", 
+                      "microsoft.dataprotection/backupvaults/backupinstances")
+    | extend vaultName = iff(type =~ "microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems",
+                             tostring(split(split(id, '/Microsoft.RecoveryServices/vaults/')[1],'/')[0]),
+                             tostring(split(split(id, '/Microsoft.DataProtection/backupVaults/')[1],'/')[0])),
+             vaultType = iff(type =~ "microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems",
+                             "Recovery Services (ASR)",
+                             "Data Protection (Backup)"),
+             protectedItemName = iff(type =~ "microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems",
+                                     tostring(properties.friendlyName),
+                                     tostring(properties.dataSourceInfo.resourceName)),
+             isValidItem = iff(type =~ "microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems" and properties.backupManagementType == "AzureIaasVM", 1,
+                              iff(type == "microsoft.dataprotection/backupvaults/backupinstances" and tostring(properties.dataSourceInfo.datasourceType) has "microsoft.dbforpostgresql/flexibleservers", 1, 0))
+    | where isValidItem == 1
+    | summarize protectedItems = make_set(protectedItemName) by vaultName, subscriptionId, vaultType
+) on $left.vault == $right.vaultName and $left.subscriptionId == $right.subscriptionId and $left.vaultType == $right.vaultType
+| project vault, subscriptionId, location, vaultType, softDelete, bcdrSecurityLevel, secureScore, crossRegionRestore, protectedItems

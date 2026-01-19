@@ -1,0 +1,28 @@
+// VM backup coverage by subscription via Azure Resource Graph (ARG)
+// Based on https://docs.azure.cn/en-us/backup/query-backups-using-azure-resource-graph
+// Uses RecoveryServicesResources to find protected items for Azure IaaS VMs.
+Resources
+| where type in~ ("microsoft.compute/virtualmachines","microsoft.classiccompute/virtualmachines")
+| project subscriptionId, vmId = tolower(id), vmName = name, resourceGroup, location
+| join kind=leftouter (
+        RecoveryServicesResources
+        | where type == "microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems"
+        | where properties.backupManagementType == "AzureIaasVM"
+        | project vmId = tolower(tostring(properties.sourceResourceId)),
+                            backupItemId = id,
+                            vaultName = split(split(id, '/Microsoft.RecoveryServices/vaults/')[1],'/')[0],
+                            policyName = tostring(properties.policyName),
+                            protectionState = tostring(properties.currentProtectionState),
+                            lastRestorePoint = todatetime(properties.lastRecoveryPoint)
+) on vmId
+| extend isProtected = iif(isnotempty(backupItemId), 1, 0)
+| summarize 
+        totalVMs = count(),
+        protectedVMs = sum(isProtected),
+        coveredVmNames = make_set_if(vmName, isProtected == 1),
+        uncoveredVmNames = make_set_if(vmName, isProtected == 0),
+        vaultNames = make_set_if(strcat(vaultName, ' (', vmName, ')'), isProtected == 1),
+        latestRestorePoint = max(iif(isProtected == 1, lastRestorePoint, datetime(null)))
+    by subscriptionId
+| extend uncoveredVMs = totalVMs - protectedVMs,
+           coveragePct = iff(totalVMs == 0, 0.0, round(100.0 * protectedVMs / totalVMs, 1))

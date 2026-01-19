@@ -1,0 +1,296 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# Azure Backup & Disaster Recovery Dashboard\nComprehensive view of backup coverage and DR readiness across VMs, databases (PostgreSQL, SQL Database, SQL Managed Instance), and recovery vaults.\n\n**Note:** Azure SQL Database and SQL Managed Instance have automatic platform backups (always 100% protected). However, detailed backup retention policies cannot be fully monitored via Azure Resource Graph (ARG). The following data is **not available** through ARG:\n- Point-in-time restore (PITR) retention settings\n- Differential backup frequency configuration\n- Long-term retention (LTR) policy details\n- Time-based immutability settings\n\nFor complete backup policy details, use Azure Portal, Azure CLI, or PowerShell."
+      },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "subscription-param",
+            "version": "KqlParameterItem/1.0",
+            "name": "Subscriptions",
+            "type": 6,
+            "isRequired": true,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "typeSettings": {
+              "additionalResourceOptions": [
+                "value::all"
+              ],
+              "includeAll": true,
+              "showDefault": false
+            },
+            "timeContext": {
+              "durationMs": 86400000
+            },
+            "defaultValue": "value::all",
+            "value": [
+              "value::all"
+            ]
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type in~ (\"microsoft.compute/virtualmachines\",\"microsoft.classiccompute/virtualmachines\")\n| project subscriptionId, vmId = tolower(id), vmName = name\n| join kind=leftouter (\n    RecoveryServicesResources\n    | where type == \"microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems\"\n    | where properties.backupManagementType == \"AzureIaasVM\"\n    | project vmId = tolower(tostring(properties.sourceResourceId)), vaultName = tostring(split(split(id, '/Microsoft.RecoveryServices/vaults/')[1],'/')[0])\n) on vmId\n| extend isProtected = isnotempty(vaultName)\n| summarize \n    ['Total VMs'] = count(),\n    ['Protected VMs'] = countif(isProtected),\n    ['Unprotected VMs'] = countif(not(isProtected))\n  by subscriptionId\n| extend ['Coverage %'] = round(100.0 * ['Protected VMs'] / ['Total VMs'], 1)\n| extend Status = iff(['Coverage %'] >= 80, '✅ Good', iff(['Coverage %'] >= 50, '⚠️ Fair', '❌ Poor'))\n| project subscriptionId, Status, ['Total VMs'], ['Protected VMs'], ['Unprotected VMs'], ['Coverage %']\n| order by ['Coverage %'] asc",
+        "size": 0,
+        "title": "🖥️ Virtual Machine Backup Coverage by Subscription",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "subscriptionId",
+              "formatter": 13,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "showIcon": true
+              }
+            },
+            {
+              "columnMatch": "Coverage %",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "max": 100,
+                "palette": "redGreen"
+              }
+            },
+            {
+              "columnMatch": "Unprotected VMs",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "palette": "greenRed"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type in~ (\"microsoft.dbforpostgresql/flexibleservers\")\n| project subscriptionId, serverId = tolower(id)\n| join kind=leftouter (\n    RecoveryServicesResources \n    | where type == \"microsoft.dataprotection/backupvaults/backupinstances\"\n    | where properties.dataSourceSetInfo.datasourceType =~ \"Microsoft.DBforPostgreSQL/flexibleServers\"\n    | extend serverKey = tolower(coalesce(tostring(properties.dataSourceInfo.resourceId), tostring(properties.dataSourceInfo.resourceID), tostring(properties.dataSourceId), tostring(properties.dataSourceSetInfo.resourceID)))\n    | project serverId = serverKey, vaultName = tostring(split(split(id, '/Microsoft.DataProtection/backupVaults/')[1],'/')[0])\n) on serverId\n| extend hasVaultBackup = isnotempty(vaultName)\n| summarize \n    ['Total Servers'] = count(),\n    ['Automatic Backup (Built-in)'] = count(),\n    ['Vault Backup Enabled'] = countif(hasVaultBackup),\n    ['Vault Backup Not Enabled'] = countif(not(hasVaultBackup))\n  by subscriptionId\n| extend ['Vault Coverage %'] = round(100.0 * ['Vault Backup Enabled'] / ['Total Servers'], 1)\n| extend Status = iff(['Vault Coverage %'] >= 50, '✅ Good', iff(['Vault Coverage %'] > 0, '⚠️ Partial', 'ℹ️ Built-in Only'))\n| project subscriptionId, Status, ['Total Servers'], ['Automatic Backup (Built-in)'], ['Vault Backup Enabled'], ['Vault Backup Not Enabled'], ['Vault Coverage %']\n| order by ['Vault Coverage %'] asc",
+        "size": 0,
+        "title": "🐘 PostgreSQL Flexible Server Backup Coverage by Subscription",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "subscriptionId",
+              "formatter": 13,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "showIcon": true
+              }
+            },
+            {
+              "columnMatch": "Vault Coverage %",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "max": 100,
+                "palette": "blue"
+              }
+            },
+            {
+              "columnMatch": "Vault Backup Not Enabled",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "yellow"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 📋 Detailed Resource Views"
+      },
+      "name": "details-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type in~ (\"microsoft.compute/virtualmachines\",\"microsoft.classiccompute/virtualmachines\")\n| project subscriptionId, vmId = tolower(id), vmName = name, resourceGroup, location\n| join kind=leftouter (\n    RecoveryServicesResources\n    | where type == \"microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems\"\n    | where properties.backupManagementType == \"AzureIaasVM\"\n    | project \n        vmId = tolower(tostring(properties.sourceResourceId)),\n        backupItemId = id,\n        vaultId = tostring(split(id, '/backupFabrics/')[0]),\n        policyName = tostring(properties.policyName),\n        protectionState = tostring(properties.currentProtectionState),\n        lastRestorePoint = todatetime(properties.lastRecoveryPoint)\n) on vmId\n| extend isProtected = iff(isnotempty(backupItemId), \"Protected\", \"Unprotected\")\n| extend daysSinceRestore = iif(isnotempty(backupItemId), toint(datetime_diff('day', now(), lastRestorePoint)), int(null))\n| project subscriptionId, resourceGroup, location, vmName, vmId, isProtected, vaultId, policyName, protectionState, lastRestorePoint, daysSinceRestore, backupItemId\n| order by subscriptionId asc, resourceGroup asc, vmName asc",
+        "size": 0,
+        "title": "Virtual Machine Backup Details",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "vaultId",
+              "formatter": 13,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "showIcon": true
+              }
+            },
+            {
+              "columnMatch": "isProtected",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Protected",
+                    "representation": "success",
+                    "text": "{0}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "warning",
+                    "text": "{0}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "daysSinceRestore",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "greenRed"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type in~ (\"microsoft.dbforpostgresql/flexibleservers\")\n| project subscriptionId, serverId = tolower(id), serverName = name, resourceGroup, location\n| join kind=leftouter (\n    RecoveryServicesResources\n    | where type == \"microsoft.dataprotection/backupvaults/backupinstances\"\n    | extend serverKey = tolower(coalesce(tostring(properties.dataSourceInfo.resourceId), tostring(properties.dataSourceInfo.resourceID), tostring(properties.dataSourceId), tostring(properties.dataSourceSetInfo.resourceID), tostring(properties.dataSourceInfo.objectId))),\n             vaultId = tostring(split(id, '/backupInstances/')[0]),\n             protectionState = coalesce(tostring(properties.currentProtectionState), tostring(properties.protectionStatus.status))\n    | where tostring(properties.dataSourceInfo.datasourceType) has \"microsoft.dbforpostgresql/flexibleservers\"\n    | project serverId = serverKey, backupInstanceId = id, vaultId, protectionState\n) on serverId\n| extend isProtected = iff(isnotempty(backupInstanceId), \"Protected\", \"Unprotected\")\n| project subscriptionId, resourceGroup, location, serverName, serverId, isProtected, vaultId, protectionState, backupInstanceId\n| order by subscriptionId asc, resourceGroup asc, serverName asc",
+        "size": 0,
+        "title": "PostgreSQL Flexible Server Backup Details",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "vaultId",
+              "formatter": 13,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "showIcon": true
+              }
+            },
+            {
+              "columnMatch": "isProtected",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Protected",
+                    "representation": "success",
+                    "text": "{0}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "warning",
+                    "text": "{0}"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## 🛡️ Disaster Recovery Readiness"
+      },
+      "name": "dr-header"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type in~ (\"microsoft.recoveryservices/vaults\", \"microsoft.dataprotection/backupvaults\")\n| extend vaultType = iff(type =~ \"microsoft.recoveryservices/vaults\", \"Recovery Services (ASR)\", \"Data Protection (Backup)\"),\n         softDelete = iff(type =~ \"microsoft.recoveryservices/vaults\", \n                          toint(properties.securitySettings.softDeleteSettings.softDeleteRetentionPeriodInDays), \n                          toint(properties.securitySettings.softDeleteSettings.retentionDurationInDays)),\n         bcdrSecurityLevel = tostring(properties.bcdrSecurityLevel),\n         secureScore = tostring(properties.secureScore),\n         crossRegionRestore = iff(type =~ \"microsoft.recoveryservices/vaults\",\n                                  tostring(properties.redundancySettings.crossRegionRestore),\n                                  tostring(properties.featureSettings.crossRegionRestoreSettings.state))\n| project vault = name, subscriptionId, location, vaultType, softDelete, bcdrSecurityLevel, secureScore, crossRegionRestore\n| join kind=leftouter (\n    RecoveryServicesResources\n    | where type in~ (\"microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems\", \n                      \"microsoft.dataprotection/backupvaults/backupinstances\")\n    | extend vaultName = iff(type =~ \"microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems\",\n                             tostring(split(split(id, '/Microsoft.RecoveryServices/vaults/')[1],'/')[0]),\n                             tostring(split(split(id, '/Microsoft.DataProtection/backupVaults/')[1],'/')[0])),\n             vaultType = iff(type =~ \"microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems\",\n                             \"Recovery Services (ASR)\",\n                             \"Data Protection (Backup)\"),\n             protectedItemName = iff(type =~ \"microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems\",\n                                     tostring(properties.friendlyName),\n                                     tostring(properties.dataSourceInfo.resourceName)),\n             isValidItem = iff(type =~ \"microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems\" and properties.backupManagementType == \"AzureIaasVM\", 1,\n                              iff(type == \"microsoft.dataprotection/backupvaults/backupinstances\" and tostring(properties.dataSourceInfo.datasourceType) has \"microsoft.dbforpostgresql/flexibleservers\", 1, 0))\n    | where isValidItem == 1\n    | summarize protectedItems = make_set(protectedItemName) by vaultName, subscriptionId, vaultType\n) on $left.vault == $right.vaultName and $left.subscriptionId == $right.subscriptionId and $left.vaultType == $right.vaultType\n| project vault, subscriptionId, location, vaultType, softDelete, bcdrSecurityLevel, secureScore, crossRegionRestore, protectedItems",
+        "size": 0,
+        "title": "Recovery Vault Inventory & Security Posture",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "crossRegionRestore",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "contains",
+                    "thresholdValue": "Enabled",
+                    "representation": "success",
+                    "text": "{0}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "disabled",
+                    "text": "{0}"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "name": "dr-vaults"
+    }
+  ],
+  "fallbackResourceIds": [],
+  "fromTemplateId": "sentinel-UserWorkbook",
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

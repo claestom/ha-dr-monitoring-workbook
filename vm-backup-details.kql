@@ -1,0 +1,21 @@
+// Detailed VM backup status via Azure Resource Graph (ARG)
+// Per-VM list with protection metadata
+Resources
+| where type in~ ("microsoft.compute/virtualmachines","microsoft.classiccompute/virtualmachines")
+| project subscriptionId, vmId = tolower(id), vmName = name, resourceGroup, location
+| join kind=leftouter (
+    RecoveryServicesResources
+    | where type == "microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems"
+    | where properties.backupManagementType == "AzureIaasVM"
+    | project 
+        vmId = tolower(tostring(properties.sourceResourceId)),
+        backupItemId = id,
+        vaultName = split(split(id, '/Microsoft.RecoveryServices/vaults/')[1],'/')[0],
+        policyName = tostring(properties.policyName),
+        protectionState = tostring(properties.currentProtectionState),
+        lastRestorePoint = todatetime(properties.lastRecoveryPoint)
+) on vmId
+| extend isProtected = isnotempty(backupItemId)
+| extend daysSinceRestore = iif(isProtected, toint(datetime_diff('day', now(), lastRestorePoint)), int(null))
+| project subscriptionId, resourceGroup, location, vmName, vmId, isProtected, vaultName, policyName, protectionState, lastRestorePoint, daysSinceRestore, backupItemId
+| order by subscriptionId asc, resourceGroup asc, vmName asc

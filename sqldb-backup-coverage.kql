@@ -1,0 +1,29 @@
+// Azure SQL Database backup coverage by subscription via Azure Resource Graph (ARG)
+// Platform backups are always on (PITR). LTR is exposed when policies exist as child resources.
+Resources
+| where type in~ ("microsoft.sql/servers/databases")
+| where name !in~ ("master")
+| project subscriptionId, dbId = tolower(id), dbName = name, resourceGroup, location
+| join kind=leftouter (
+  Resources
+  | where tolower(type) has "backupshorttermretentionpolicies"
+  | extend dbId = tolower(split(id, "/backupShortTermRetentionPolicies")[0])
+  | project dbId,
+        strRetentionDays = toint(properties.retentionDays)
+) on dbId
+| extend automaticBackup = "Enabled (platform)",
+         fullBackupFrequency = "Weekly (platform)",
+         diffBackupFrequency = "12h (platform)",
+         logBackupFrequency = "5-10m (platform)"
+| summarize 
+    totalDBs = count(),
+    protectedDBs = count(),
+    dbsWithStrPolicy = countif(isnotempty(strRetentionDays)),
+    AutomaticBackup = any(automaticBackup),
+    FullBackupFrequency = any(fullBackupFrequency),
+    DiffBackupFrequency = any(diffBackupFrequency),
+    LogBackupFrequency = any(logBackupFrequency),
+    dbNames = make_set(dbName)
+  by subscriptionId
+| extend coveragePct = 100.0,
+         strCoveragePct = iff(totalDBs == 0, 0.0, round(100.0 * dbsWithStrPolicy / totalDBs, 1))
