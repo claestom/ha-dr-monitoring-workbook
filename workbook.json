@@ -45,163 +45,188 @@
       "name": "parameters"
     },
     {
-      "type": 3,
+      "type": 1,
       "content": {
-        "version": "KqlItem/1.0",
-        "query": "Resources\n| where type in~ (\"microsoft.compute/virtualmachines\",\"microsoft.classiccompute/virtualmachines\")\n| project subscriptionId, vmId = tolower(id), vmName = name\n| join kind=leftouter (\n    RecoveryServicesResources\n    | where type == \"microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems\"\n    | where properties.backupManagementType == \"AzureIaasVM\"\n    | project vmId = tolower(tostring(properties.sourceResourceId)), vaultName = tostring(split(split(id, '/Microsoft.RecoveryServices/vaults/')[1],'/')[0])\n) on vmId\n| extend isProtected = isnotempty(vaultName)\n| summarize \n    ['Total VMs'] = count(),\n    ['Protected VMs'] = countif(isProtected),\n    ['Unprotected VMs'] = countif(not(isProtected))\n  by subscriptionId\n| extend ['Coverage %'] = round(100.0 * ['Protected VMs'] / ['Total VMs'], 1)\n| extend Status = iff(['Coverage %'] >= 80, '✅ Good', iff(['Coverage %'] >= 50, '⚠️ Fair', '❌ Poor'))\n| project subscriptionId, Status, ['Total VMs'], ['Protected VMs'], ['Unprotected VMs'], ['Coverage %']\n| order by ['Coverage %'] asc",
-        "size": 0,
-        "title": "🖥️ Virtual Machine Backup Coverage by Subscription",
-        "queryType": 1,
-        "resourceType": "microsoft.resourcegraph/resources",
-        "crossComponentResources": [
-          "{Subscriptions}"
-        ],
-        "visualization": "table",
-        "gridSettings": {
-          "formatters": [
-            {
-              "columnMatch": "subscriptionId",
-              "formatter": 13,
-              "formatOptions": {
-                "linkTarget": "Resource",
-                "showIcon": true
-              }
-            },
-            {
-              "columnMatch": "Coverage %",
-              "formatter": 8,
-              "formatOptions": {
-                "min": 0,
-                "max": 100,
-                "palette": "redGreen"
-              }
-            },
-            {
-              "columnMatch": "Unprotected VMs",
-              "formatter": 8,
-              "formatOptions": {
-                "min": 0,
-                "palette": "greenRed"
-              }
-            }
-          ]
-        }
-      }
+        "json": "## 📊 Backup Coverage by Subscription"
+      },
+      "name": "coverage-header"
     },
     {
-      "type": 3,
+      "type": 12,
       "content": {
-        "version": "KqlItem/1.0",
-        "query": "Resources\n| where type in~ (\"microsoft.dbforpostgresql/flexibleservers\")\n| project subscriptionId, serverId = tolower(id)\n| join kind=leftouter (\n    RecoveryServicesResources \n    | where type == \"microsoft.dataprotection/backupvaults/backupinstances\"\n    | where properties.dataSourceSetInfo.datasourceType =~ \"Microsoft.DBforPostgreSQL/flexibleServers\"\n    | extend serverKey = tolower(coalesce(tostring(properties.dataSourceInfo.resourceId), tostring(properties.dataSourceInfo.resourceID), tostring(properties.dataSourceId), tostring(properties.dataSourceSetInfo.resourceID)))\n    | project serverId = serverKey, vaultName = tostring(split(split(id, '/Microsoft.DataProtection/backupVaults/')[1],'/')[0])\n) on serverId\n| extend hasVaultBackup = isnotempty(vaultName)\n| summarize \n    ['Total Servers'] = count(),\n    ['Automatic Backup (Built-in)'] = count(),\n    ['Vault Backup Enabled'] = countif(hasVaultBackup),\n    ['Vault Backup Not Enabled'] = countif(not(hasVaultBackup))\n  by subscriptionId\n| extend ['Vault Coverage %'] = round(100.0 * ['Vault Backup Enabled'] / ['Total Servers'], 1)\n| extend Status = iff(['Vault Coverage %'] >= 50, '✅ Good', iff(['Vault Coverage %'] > 0, '⚠️ Partial', 'ℹ️ Built-in Only'))\n| project subscriptionId, Status, ['Total Servers'], ['Automatic Backup (Built-in)'], ['Vault Backup Enabled'], ['Vault Backup Not Enabled'], ['Vault Coverage %']\n| order by ['Vault Coverage %'] asc",
-        "size": 0,
-        "title": "🐘 PostgreSQL Flexible Server Backup Coverage by Subscription",
-        "queryType": 1,
-        "resourceType": "microsoft.resourcegraph/resources",
-        "crossComponentResources": [
-          "{Subscriptions}"
-        ],
-        "visualization": "table",
-        "gridSettings": {
-          "formatters": [
-            {
-              "columnMatch": "subscriptionId",
-              "formatter": 13,
-              "formatOptions": {
-                "linkTarget": "Resource",
-                "showIcon": true
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "items": [
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "Resources\n| where type in~ (\"microsoft.compute/virtualmachines\",\"microsoft.classiccompute/virtualmachines\")\n| project subscriptionId, vmId = tolower(id), vmName = name\n| join kind=leftouter (\n    RecoveryServicesResources\n    | where type == \"microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems\"\n    | where properties.backupManagementType == \"AzureIaasVM\"\n    | project vmId = tolower(tostring(properties.sourceResourceId)), vaultName = tostring(split(split(id, '/Microsoft.RecoveryServices/vaults/')[1],'/')[0])\n) on vmId\n| extend isProtected = isnotempty(vaultName)\n| summarize \n    ['Total VMs'] = count(),\n    ['Protected VMs'] = countif(isProtected),\n    ['Unprotected VMs'] = countif(not(isProtected))\n  by subscriptionId\n| extend ['Coverage %'] = round(100.0 * ['Protected VMs'] / ['Total VMs'], 1)\n| extend Status = iff(['Coverage %'] >= 80, '✅ Good', iff(['Coverage %'] >= 50, '⚠️ Fair', '❌ Poor'))\n| project subscriptionId, Status, ['Total VMs'], ['Protected VMs'], ['Unprotected VMs'], ['Coverage %']\n| order by ['Coverage %'] asc",
+              "size": 3,
+              "title": "🖥️ Virtual Machine Backup Coverage by Subscription",
+              "queryType": 1,
+              "resourceType": "microsoft.resourcegraph/resources",
+              "crossComponentResources": [
+                "{Subscriptions}"
+              ],
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "subscriptionId",
+                    "formatter": 13,
+                    "formatOptions": {
+                      "linkTarget": "Resource",
+                      "showIcon": true
+                    }
+                  },
+                  {
+                    "columnMatch": "Coverage %",
+                    "formatter": 8,
+                    "formatOptions": {
+                      "min": 0,
+                      "max": 100,
+                      "palette": "redGreen"
+                    }
+                  },
+                  {
+                    "columnMatch": "Unprotected VMs",
+                    "formatter": 8,
+                    "formatOptions": {
+                      "min": 0,
+                      "palette": "greenRed"
+                    }
+                  }
+                ]
               }
             },
-            {
-              "columnMatch": "Vault Coverage %",
-              "formatter": 8,
-              "formatOptions": {
-                "min": 0,
-                "max": 100,
-                "palette": "blue"
+            "customWidth": "50",
+            "name": "vm-coverage"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "Resources\n| where type in~ (\"microsoft.dbforpostgresql/flexibleservers\")\n| project subscriptionId, serverId = tolower(id)\n| join kind=leftouter (\n    RecoveryServicesResources \n    | where type == \"microsoft.dataprotection/backupvaults/backupinstances\"\n    | where properties.dataSourceSetInfo.datasourceType =~ \"Microsoft.DBforPostgreSQL/flexibleServers\"\n    | extend serverKey = tolower(coalesce(tostring(properties.dataSourceInfo.resourceId), tostring(properties.dataSourceInfo.resourceID), tostring(properties.dataSourceId), tostring(properties.dataSourceSetInfo.resourceID)))\n    | project serverId = serverKey, vaultName = tostring(split(split(id, '/Microsoft.DataProtection/backupVaults/')[1],'/')[0])\n) on serverId\n| extend hasVaultBackup = isnotempty(vaultName)\n| summarize \n    ['Total Servers'] = count(),\n    ['Automatic Backup (Built-in)'] = count(),\n    ['Vault Backup Enabled'] = countif(hasVaultBackup),\n    ['Vault Backup Not Enabled'] = countif(not(hasVaultBackup))\n  by subscriptionId\n| extend ['Vault Coverage %'] = round(100.0 * ['Vault Backup Enabled'] / ['Total Servers'], 1)\n| extend Status = iff(['Vault Coverage %'] >= 50, '✅ Good', iff(['Vault Coverage %'] > 0, '⚠️ Partial', 'ℹ️ Built-in Only'))\n| project subscriptionId, Status, ['Total Servers'], ['Automatic Backup (Built-in)'], ['Vault Backup Enabled'], ['Vault Backup Not Enabled'], ['Vault Coverage %']\n| order by ['Vault Coverage %'] asc",
+              "size": 3,
+              "title": "🐘 PostgreSQL Flexible Server Backup Coverage by Subscription",
+              "queryType": 1,
+              "resourceType": "microsoft.resourcegraph/resources",
+              "crossComponentResources": [
+                "{Subscriptions}"
+              ],
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "subscriptionId",
+                    "formatter": 13,
+                    "formatOptions": {
+                      "linkTarget": "Resource",
+                      "showIcon": true
+                    }
+                  },
+                  {
+                    "columnMatch": "Vault Coverage %",
+                    "formatter": 8,
+                    "formatOptions": {
+                      "min": 0,
+                      "max": 100,
+                      "palette": "blue"
+                    }
+                  },
+                  {
+                    "columnMatch": "Vault Backup Not Enabled",
+                    "formatter": 8,
+                    "formatOptions": {
+                      "palette": "yellow"
+                    }
+                  }
+                ]
               }
             },
-            {
-              "columnMatch": "Vault Backup Not Enabled",
-              "formatter": 8,
-              "formatOptions": {
-                "palette": "yellow"
-              }
-            }
-          ]
-        }
-      }
-    },
-    {
-      "type": 3,
-      "content": {
-        "version": "KqlItem/1.0",
-        "query": "Resources\n| where type in~ (\"microsoft.sql/servers/databases\")\n| where name !in~ (\"master\")\n| project subscriptionId, dbId = tolower(id), dbName = name\n| summarize \n    ['Total Databases'] = count(),\n    ['Protected (Platform)'] = count()\n  by subscriptionId\n| extend ['Coverage %'] = 100.0\n| extend Status = '✅ Good'\n| project subscriptionId, Status, ['Total Databases'], ['Protected (Platform)'], ['Coverage %']\n| order by subscriptionId asc",
-        "size": 0,
-        "title": "💾 Azure SQL Database Backup Coverage by Subscription",
-        "queryType": 1,
-        "resourceType": "microsoft.resourcegraph/resources",
-        "crossComponentResources": [
-          "{Subscriptions}"
-        ],
-        "visualization": "table",
-        "gridSettings": {
-          "formatters": [
-            {
-              "columnMatch": "subscriptionId",
-              "formatter": 13,
-              "formatOptions": {
-                "linkTarget": "Resource",
-                "showIcon": true
-              }
-            },
-            {
-              "columnMatch": "Coverage %",
-              "formatter": 8,
-              "formatOptions": {
-                "min": 0,
-                "max": 100,
-                "palette": "green"
-              }
-            }
-          ]
-        }
-      }
-    },
-    {
-      "type": 3,
-      "content": {
-        "version": "KqlItem/1.0",
-        "query": "Resources\n| where type in~ (\"microsoft.sql/managedInstances/databases\")\n| where name !in~ (\"master\")\n| project subscriptionId, dbId = tolower(id), dbName = name\n| summarize \n    ['Total Databases'] = count(),\n    ['Protected (Platform)'] = count()\n  by subscriptionId\n| extend ['Coverage %'] = 100.0\n| extend Status = '✅ Good'\n| project subscriptionId, Status, ['Total Databases'], ['Protected (Platform)'], ['Coverage %']\n| order by subscriptionId asc",
-        "size": 0,
-        "title": "🗄️ SQL Managed Instance Backup Coverage by Subscription",
-        "queryType": 1,
-        "resourceType": "microsoft.resourcegraph/resources",
-        "crossComponentResources": [
-          "{Subscriptions}"
-        ],
-        "visualization": "table",
-        "gridSettings": {
-          "formatters": [
-            {
-              "columnMatch": "subscriptionId",
-              "formatter": 13,
-              "formatOptions": {
-                "linkTarget": "Resource",
-                "showIcon": true
+            "customWidth": "50",
+            "name": "postgresql-coverage"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "Resources\n| where type in~ (\"microsoft.sql/servers/databases\")\n| where name !in~ (\"master\")\n| project subscriptionId, dbId = tolower(id), dbName = name\n| summarize \n    ['Total Databases'] = count(),\n    ['Protected (Platform)'] = count()\n  by subscriptionId\n| extend ['Coverage %'] = 100.0\n| extend Status = '✅ Good'\n| project subscriptionId, Status, ['Total Databases'], ['Protected (Platform)'], ['Coverage %']\n| order by subscriptionId asc",
+              "size": 3,
+              "title": "💾 Azure SQL Database Backup Coverage by Subscription",
+              "queryType": 1,
+              "resourceType": "microsoft.resourcegraph/resources",
+              "crossComponentResources": [
+                "{Subscriptions}"
+              ],
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "subscriptionId",
+                    "formatter": 13,
+                    "formatOptions": {
+                      "linkTarget": "Resource",
+                      "showIcon": true
+                    }
+                  },
+                  {
+                    "columnMatch": "Coverage %",
+                    "formatter": 8,
+                    "formatOptions": {
+                      "min": 0,
+                      "max": 100,
+                      "palette": "green"
+                    }
+                  }
+                ]
               }
             },
-            {
-              "columnMatch": "Coverage %",
-              "formatter": 8,
-              "formatOptions": {
-                "min": 0,
-                "max": 100,
-                "palette": "green"
+            "customWidth": "50",
+            "name": "sqldb-coverage"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "Resources\n| where type in~ (\"microsoft.sql/managedInstances/databases\")\n| where name !in~ (\"master\")\n| project subscriptionId, dbId = tolower(id), dbName = name\n| summarize \n    ['Total Databases'] = count(),\n    ['Protected (Platform)'] = count()\n  by subscriptionId\n| extend ['Coverage %'] = 100.0\n| extend Status = '✅ Good'\n| project subscriptionId, Status, ['Total Databases'], ['Protected (Platform)'], ['Coverage %']\n| order by subscriptionId asc",
+              "size": 3,
+              "title": "🗄️ SQL Managed Instance Backup Coverage by Subscription",
+              "queryType": 1,
+              "resourceType": "microsoft.resourcegraph/resources",
+              "crossComponentResources": [
+                "{Subscriptions}"
+              ],
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "subscriptionId",
+                    "formatter": 13,
+                    "formatOptions": {
+                      "linkTarget": "Resource",
+                      "showIcon": true
+                    }
+                  },
+                  {
+                    "columnMatch": "Coverage %",
+                    "formatter": 8,
+                    "formatOptions": {
+                      "min": 0,
+                      "max": 100,
+                      "palette": "green"
+                    }
+                  }
+                ]
               }
-            }
-          ]
-        }
-      }
+            },
+            "customWidth": "50",
+            "name": "sqlmi-coverage"
+          }
+        ]
+      },
+      "name": "coverage-group"
     },
     {
       "type": 1,
@@ -215,7 +240,7 @@
       "content": {
         "version": "KqlItem/1.0",
         "query": "Resources\n| where type in~ (\"microsoft.compute/virtualmachines\",\"microsoft.classiccompute/virtualmachines\")\n| project subscriptionId, vmId = tolower(id), vmName = name, resourceGroup, location\n| join kind=leftouter (\n    RecoveryServicesResources\n    | where type == \"microsoft.recoveryservices/vaults/backupfabrics/protectioncontainers/protecteditems\"\n    | where properties.backupManagementType == \"AzureIaasVM\"\n    | project \n        vmId = tolower(tostring(properties.sourceResourceId)),\n        backupItemId = id,\n        vaultId = tostring(split(id, '/backupFabrics/')[0]),\n        policyName = tostring(properties.policyName),\n        protectionState = tostring(properties.currentProtectionState),\n        lastRestorePoint = todatetime(properties.lastRecoveryPoint)\n) on vmId\n| extend isProtected = iff(isnotempty(backupItemId), \"Protected\", \"Unprotected\")\n| extend daysSinceRestore = iif(isnotempty(backupItemId), toint(datetime_diff('day', now(), lastRestorePoint)), int(null))\n| project subscriptionId, resourceGroup, location, vmName, vmId, isProtected, vaultId, policyName, protectionState, lastRestorePoint, daysSinceRestore, backupItemId\n| order by subscriptionId asc, resourceGroup asc, vmName asc",
-        "size": 0,
+        "size": 3,
         "title": "Virtual Machine Backup Details",
         "queryType": 1,
         "resourceType": "microsoft.resourcegraph/resources",
@@ -263,14 +288,15 @@
             }
           ]
         }
-      }
+      },
+      "name": "vm-details"
     },
     {
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
         "query": "Resources\n| where type in~ (\"microsoft.dbforpostgresql/flexibleservers\")\n| project subscriptionId, serverId = tolower(id), serverName = name, resourceGroup, location\n| join kind=leftouter (\n    RecoveryServicesResources\n    | where type == \"microsoft.dataprotection/backupvaults/backupinstances\"\n    | extend serverKey = tolower(coalesce(tostring(properties.dataSourceInfo.resourceId), tostring(properties.dataSourceInfo.resourceID), tostring(properties.dataSourceId), tostring(properties.dataSourceSetInfo.resourceID), tostring(properties.dataSourceInfo.objectId))),\n             vaultId = tostring(split(id, '/backupInstances/')[0]),\n             protectionState = coalesce(tostring(properties.currentProtectionState), tostring(properties.protectionStatus.status))\n    | where tostring(properties.dataSourceInfo.datasourceType) has \"microsoft.dbforpostgresql/flexibleservers\"\n    | project serverId = serverKey, backupInstanceId = id, vaultId, protectionState\n) on serverId\n| extend isProtected = iff(isnotempty(backupInstanceId), \"Protected\", \"Unprotected\")\n| project subscriptionId, resourceGroup, location, serverName, serverId, isProtected, vaultId, protectionState, backupInstanceId\n| order by subscriptionId asc, resourceGroup asc, serverName asc",
-        "size": 0,
+        "size": 3,
         "title": "PostgreSQL Flexible Server Backup Details",
         "queryType": 1,
         "resourceType": "microsoft.resourcegraph/resources",
@@ -311,14 +337,15 @@
             }
           ]
         }
-      }
+      },
+      "name": "postgresql-details"
     },
     {
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
         "query": "Resources\n| where type in~ (\"microsoft.sql/servers/databases\")\n| where name !in~ (\"master\")\n| project subscriptionId, dbId = tolower(id), dbName = name, resourceGroup, location, serverName = tostring(split(id, '/databases/')[0])\n| extend serverName = tostring(split(serverName, '/')[8])\n| extend isProtected = \"Protected\"\n| extend backupType = \"Platform (Automatic)\"\n| project subscriptionId, resourceGroup, location, serverName, dbName, dbId, isProtected, backupType\n| order by subscriptionId asc, resourceGroup asc, serverName asc, dbName asc",
-        "size": 0,
+        "size": 3,
         "title": "Azure SQL Database Backup Details",
         "queryType": 1,
         "resourceType": "microsoft.resourcegraph/resources",
@@ -345,14 +372,15 @@
             }
           ]
         }
-      }
+      },
+      "name": "sqldb-details"
     },
     {
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
         "query": "Resources\n| where type in~ (\"microsoft.sql/managedInstances/databases\")\n| where name !in~ (\"master\")\n| project subscriptionId, dbId = tolower(id), dbName = name, resourceGroup, location, instanceName = tostring(split(id, '/databases/')[0])\n| extend instanceName = tostring(split(instanceName, '/')[8])\n| extend isProtected = \"Protected\"\n| extend backupType = \"Platform (Automatic)\"\n| project subscriptionId, resourceGroup, location, instanceName, dbName, dbId, isProtected, backupType\n| order by subscriptionId asc, resourceGroup asc, instanceName asc, dbName asc",
-        "size": 0,
+        "size": 3,
         "title": "SQL Managed Instance Backup Details",
         "queryType": 1,
         "resourceType": "microsoft.resourcegraph/resources",
@@ -379,7 +407,8 @@
             }
           ]
         }
-      }
+      },
+      "name": "sqlmi-details"
     },
     {
       "type": 1,
