@@ -132,6 +132,78 @@
       }
     },
     {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type in~ (\"microsoft.sql/servers/databases\")\n| where name !in~ (\"master\")\n| project subscriptionId, dbId = tolower(id), dbName = name\n| summarize \n    ['Total Databases'] = count(),\n    ['Protected (Platform)'] = count()\n  by subscriptionId\n| extend ['Coverage %'] = 100.0\n| extend Status = '✅ Good'\n| project subscriptionId, Status, ['Total Databases'], ['Protected (Platform)'], ['Coverage %']\n| order by subscriptionId asc",
+        "size": 0,
+        "title": "💾 Azure SQL Database Backup Coverage by Subscription",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "subscriptionId",
+              "formatter": 13,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "showIcon": true
+              }
+            },
+            {
+              "columnMatch": "Coverage %",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "max": 100,
+                "palette": "green"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type in~ (\"microsoft.sql/managedInstances/databases\")\n| where name !in~ (\"master\")\n| project subscriptionId, dbId = tolower(id), dbName = name\n| summarize \n    ['Total Databases'] = count(),\n    ['Protected (Platform)'] = count()\n  by subscriptionId\n| extend ['Coverage %'] = 100.0\n| extend Status = '✅ Good'\n| project subscriptionId, Status, ['Total Databases'], ['Protected (Platform)'], ['Coverage %']\n| order by subscriptionId asc",
+        "size": 0,
+        "title": "🗄️ SQL Managed Instance Backup Coverage by Subscription",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "subscriptionId",
+              "formatter": 13,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "showIcon": true
+              }
+            },
+            {
+              "columnMatch": "Coverage %",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "max": 100,
+                "palette": "green"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
       "type": 1,
       "content": {
         "json": "## 📋 Detailed Resource Views"
@@ -232,6 +304,74 @@
                     "operator": "Default",
                     "thresholdValue": null,
                     "representation": "warning",
+                    "text": "{0}"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type in~ (\"microsoft.sql/servers/databases\")\n| where name !in~ (\"master\")\n| project subscriptionId, dbId = tolower(id), dbName = name, resourceGroup, location, serverName = tostring(split(id, '/databases/')[0])\n| extend serverName = tostring(split(serverName, '/')[8])\n| extend isProtected = \"Protected\"\n| extend backupType = \"Platform (Automatic)\"\n| project subscriptionId, resourceGroup, location, serverName, dbName, dbId, isProtected, backupType\n| order by subscriptionId asc, resourceGroup asc, serverName asc, dbName asc",
+        "size": 0,
+        "title": "Azure SQL Database Backup Details",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "isProtected",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Protected",
+                    "representation": "success",
+                    "text": "{0}"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type in~ (\"microsoft.sql/managedInstances/databases\")\n| where name !in~ (\"master\")\n| project subscriptionId, dbId = tolower(id), dbName = name, resourceGroup, location, instanceName = tostring(split(id, '/databases/')[0])\n| extend instanceName = tostring(split(instanceName, '/')[8])\n| extend isProtected = \"Protected\"\n| extend backupType = \"Platform (Automatic)\"\n| project subscriptionId, resourceGroup, location, instanceName, dbName, dbId, isProtected, backupType\n| order by subscriptionId asc, resourceGroup asc, instanceName asc, dbName asc",
+        "size": 0,
+        "title": "SQL Managed Instance Backup Details",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "isProtected",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Protected",
+                    "representation": "success",
                     "text": "{0}"
                   }
                 ]
